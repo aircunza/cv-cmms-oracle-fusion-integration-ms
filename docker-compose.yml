@@ -1,0 +1,15 @@
+services:
+  oracle-fusion-integration-ms:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: oracle_fusion_integration_ms
+    restart: on-failure #unless-stopped
+    ports:
+      - "1436:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    volumes:
+      - oracle_fusion_integration_ms_data:/var/opt/mssql
+
+volumes:
+  oracle_fusion_integration_ms_data:
