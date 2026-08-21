@@ -1,0 +1,104 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+model OracleInstances {
+  id          BigInt @id @default(autoincrement()) @map("id")
+  environment String @map("environment") @db.NVarChar(10)
+  module      String @map("module") @db.NVarChar(50)
+  basic       String @map("basic") @db.Text
+
+  @@map("oracle_instances")
+}
+
+model OracleWorkOrders {
+  id              BigInt    @id @default(autoincrement()) @map("id")
+  oclWoId         BigInt?   @unique @map("ocl_wo_id")
+  oclWoNumber     String?   @unique @map("ocl_wo_number") @db.NVarChar(120)
+  oclWoStatusCode String?   @map("ocl_wo_status_code") @db.NVarChar(30)
+  workOrderCode   BigInt    @map("work_order_code")
+  syncStatus      String    @default("pending") @map("sync_status") @db.NVarChar(20)
+  syncError       String?   @map("sync_error") @db.Text
+  retryCount      Int       @default(0) @map("retry_count")
+  lastSyncAttempt DateTime? @map("last_sync_attempt")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([workOrderCode])
+  @@index([syncStatus])
+  @@map("oracle_work_orders")
+}
+
+model OracleWoOperations {
+  id                      BigInt    @id @default(autoincrement()) @map("id")
+  oclWoId                 BigInt    @map("ocl_wo_id")
+  oclWoNumber             String?   @map("ocl_wo_number") @db.NVarChar(120)
+  oclWoOperationId        BigInt?   @unique @map("ocl_wo_operation_id")
+  oclOperationName        String?   @map("ocl_operation_name") @db.NVarChar(120)
+  oclOperationDescription String?   @map("ocl_operation_description") @db.NVarChar(240)
+  workOrderCode           BigInt    @map("work_order_code")
+  woOperationCode         BigInt    @map("wo_operation_code")
+  syncStatus              String    @default("pending") @map("sync_status") @db.NVarChar(20)
+  syncError               String?   @map("sync_error") @db.Text
+  retryCount              Int       @default(0) @map("retry_count")
+  lastSyncAttempt         DateTime? @map("last_sync_attempt")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  @@index([workOrderCode])
+  @@index([woOperationCode])
+  @@index([oclWoId])
+  @@index([syncStatus])
+  @@map("oracle_wo_operations")
+}
+
+model OracleWoOperationMaterials {
+  id                       BigInt    @id @default(autoincrement()) @map("id")
+  oclWoId                  BigInt    @map("ocl_wo_id")
+  oclWoOperationId         BigInt    @map("ocl_wo_operation_id")
+  oclWoOperationMaterialId BigInt?   @map("ocl_wo_operation_material_id")
+  woOperationCode          BigInt    @map("wo_operation_code")
+  materialSequenceNumber   Int       @map("material_sequence_number")
+  syncStatus               String    @default("pending") @map("sync_status") @db.NVarChar(20)
+  syncError                String?   @map("sync_error") @db.Text
+  retryCount               Int       @default(0) @map("retry_count")
+  lastSyncAttempt          DateTime? @map("last_sync_attempt")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  @@unique([woOperationCode, materialSequenceNumber])
+  @@unique([oclWoOperationMaterialId])
+  @@index([oclWoId])
+  @@index([oclWoOperationId])
+  @@index([syncStatus])
+  @@map("oracle_wo_operation_materials")
+}
+
+model OracleWoOperationHumanResources {
+  id                       BigInt    @id @default(autoincrement()) @map("id")
+  oclWoId                  BigInt    @map("ocl_wo_id")
+  oclWoOperationId         BigInt    @map("ocl_wo_operation_id")
+  oclWoOperationResourceId BigInt?   @map("ocl_wo_operation_resource_id")
+  woOperationCode          BigInt    @map("wo_operation_code")
+  resourceSequenceNumber   Int       @map("resource_sequence_number")
+  resourceCode             String?   @map("resource_code") @db.NVarChar(50)
+  syncStatus               String    @default("pending") @map("sync_status") @db.NVarChar(20)
+  syncError                String?   @map("sync_error") @db.Text
+  retryCount               Int       @default(0) @map("retry_count")
+  lastSyncAttempt          DateTime? @map("last_sync_attempt")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  @@unique([woOperationCode, resourceCode])
+  @@unique([oclWoOperationResourceId])
+  @@index([oclWoId])
+  @@index([oclWoOperationId])
+  @@index([syncStatus])
+  @@map("oracle_wo_operation_human_resources")
+}
