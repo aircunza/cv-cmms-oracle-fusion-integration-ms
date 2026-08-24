@@ -1,3 +1,6 @@
+# Mock data of oracle
+/test/e2e/data/oracle-fusion-mock-data.ts
+
 # compiled output
 /dist
 /node_modules

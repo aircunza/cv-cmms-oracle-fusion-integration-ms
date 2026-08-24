@@ -2,7 +2,9 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import { envs } from '../../config';
 
 export class GeneralEncryption {
-  private static key: Uint8Array = new TextEncoder().encode(envs.oracleEncryptionKey);
+  private static key: Uint8Array = new TextEncoder().encode(
+    envs.oracleEncryptionKey,
+  );
 
   public static encrypt(text: string): string {
     const iv = randomBytes(12);
@@ -12,7 +14,9 @@ export class GeneralEncryption {
     const encryptedUpdate = cipher.update(inputData);
     const encryptedFinal = cipher.final();
 
-    const cipherText = new Uint8Array(encryptedUpdate.length + encryptedFinal.length);
+    const cipherText = new Uint8Array(
+      encryptedUpdate.length + encryptedFinal.length,
+    );
     cipherText.set(encryptedUpdate, 0);
     cipherText.set(encryptedFinal, encryptedUpdate.length);
 
@@ -39,7 +43,9 @@ export class GeneralEncryption {
     const decryptedUpdate = decipher.update(cipherText);
     const decryptedFinal = decipher.final();
 
-    const decrypted = new Uint8Array(decryptedUpdate.length + decryptedFinal.length);
+    const decrypted = new Uint8Array(
+      decryptedUpdate.length + decryptedFinal.length,
+    );
     decrypted.set(decryptedUpdate, 0);
     decrypted.set(decryptedFinal, decryptedUpdate.length);
 

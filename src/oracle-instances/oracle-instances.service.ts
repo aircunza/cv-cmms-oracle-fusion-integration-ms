@@ -101,7 +101,11 @@ export class OracleInstancesService {
       });
     }
 
-    const updateData: any = {};
+    const updateData: {
+      environment?: string;
+      module?: string;
+      basic?: string;
+    } = {};
 
     if (dto.environment !== undefined) updateData.environment = dto.environment;
     if (dto.module !== undefined) updateData.module = dto.module;
@@ -111,9 +115,10 @@ export class OracleInstancesService {
       dto.username !== undefined ||
       dto.password !== undefined
     ) {
-      const us = dto.username ?? this.decryptField(existing.basic).us;
-      const pw = dto.password ?? this.decryptField(existing.basic).pw;
-      const url = dto.url ?? this.decryptField(existing.basic).url;
+      const existingCreds = this.decryptField(existing.basic);
+      const us = dto.username ?? existingCreds.us;
+      const pw = dto.password ?? existingCreds.pw;
+      const url = dto.url ?? existingCreds.url;
 
       const credentials = JSON.stringify({ us, pw, url });
       updateData.basic = GeneralEncryption.encrypt(credentials);
@@ -152,9 +157,9 @@ export class OracleInstancesService {
     return { message: 'INSTANCE_DELETED' };
   }
 
-  async searchBasic(module = 'MAINTENANCE') {
+  async searchBasic(environment: string, module = 'MAINTENANCE') {
     const instance = await this.prisma.oracleInstances.findFirst({
-      where: { module },
+      where: { environment, module },
     });
 
     if (!instance) {
@@ -168,6 +173,10 @@ export class OracleInstancesService {
   }
 
   private decryptField(basic: string): { us: string; pw: string; url: string } {
-    return JSON.parse(GeneralEncryption.decrypt(basic));
+    return JSON.parse(GeneralEncryption.decrypt(basic)) as {
+      us: string;
+      pw: string;
+      url: string;
+    };
   }
 }

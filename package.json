@@ -17,7 +17,9 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "NODE_OPTIONS=--experimental-vm-modules jest --forceExit --runInBand --config ./test/jest-e2e.json",
+    "test:e2e:oi:find-one": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json --forceExit --runTestsByPath ./test/e2e/oracle-instances/oracle-instance.find-one.test.ts",
+    "test:e2e:wo:created": "NODE_OPTIONS=--experimental-vm-modules jest --config ./test/jest-e2e.json --forceExit --runTestsByPath ./test/e2e/oracle-work-orders/work-order-created.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.2.1",

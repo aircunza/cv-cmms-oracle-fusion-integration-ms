@@ -4,7 +4,8 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { envs } from './config';
 
-(BigInt.prototype as any).toJSON = function () {
+// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+(BigInt.prototype as any).toJSON = function toJSON(this: bigint) {
   return this.toString();
 };
 
@@ -35,6 +36,8 @@ async function bootstrap() {
   );
 
   await app.listen();
-  logger.log(`Oracle Fusion Integration Microservice running on port ${envs.port}`);
+  logger.log(
+    `Oracle Fusion Integration Microservice running on port ${envs.port}`,
+  );
 }
-bootstrap();
+void bootstrap();

@@ -8,6 +8,7 @@ interface EnvVars {
   NATS_USER: string;
   NATS_PASS: string;
   ORACLE_ENCRYPTION_KEY: string;
+  ORACLE_ENVIRONMENT: string;
 }
 
 const envsSchema = joi
@@ -18,6 +19,7 @@ const envsSchema = joi
     NATS_USER: joi.string().required(),
     NATS_PASS: joi.string().required(),
     ORACLE_ENCRYPTION_KEY: joi.string().required(),
+    ORACLE_ENVIRONMENT: joi.string().required(),
   })
   .unknown(true);
 
@@ -39,4 +41,5 @@ export const envs = {
   natsUser: envVars.NATS_USER,
   natsPass: envVars.NATS_PASS,
   oracleEncryptionKey: envVars.ORACLE_ENCRYPTION_KEY,
+  oracleEnvironment: envVars.ORACLE_ENVIRONMENT,
 };

@@ -3,6 +3,36 @@ import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../../../prisma.service';
 import { OracleFusionWorkOrderApiClient } from '../../common/oracle-fusion-work-order-api-client';
 
+interface OperationHrEvent {
+  payload?: string | OperationHrPayload;
+}
+
+interface OperationHrPayload {
+  enableOracleWorkOrder?: string;
+  oclWorkOrderId?: number;
+  oclWoOperationId?: number;
+  operationCode: number;
+  resourceCode?: string;
+  plannedStartDate?: string;
+  plannedCompletionDate?: string;
+  resourceSequenceNumber: number;
+  usageRate?: number;
+}
+
+interface OracleResourceResponse {
+  WoOperationResourceId?: number;
+  ResourceCode?: string;
+}
+
+interface OracleResourceItem {
+  WoOperationResourceId?: number;
+  ResourceCode?: string;
+}
+
+interface OracleResourcesResponse {
+  items?: OracleResourceItem[];
+}
+
 @Injectable()
 export class OperationHrCreatedHandler {
   constructor(
@@ -10,32 +40,43 @@ export class OperationHrCreatedHandler {
     private readonly oracleApiClient: OracleFusionWorkOrderApiClient,
   ) {}
 
-  async handle(event: any) {
-    const payload = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload;
+  async handle(event: OperationHrEvent) {
+    const payload: OperationHrPayload =
+      typeof event.payload === 'string'
+        ? (JSON.parse(event.payload) as OperationHrPayload)
+        : (event.payload as OperationHrPayload);
 
     if (payload.enableOracleWorkOrder !== 'Y') {
       return;
     }
 
     if (!payload.oclWorkOrderId || !payload.oclWoOperationId) {
-      console.warn(`Cannot create HR for operation ${payload.operationCode}: missing oclWorkOrderId or oclWoOperationId`);
+      console.warn(
+        `Cannot create HR for operation ${payload.operationCode}: missing oclWorkOrderId or oclWoOperationId`,
+      );
       return;
     }
 
-    const existing = await this.prisma.oracleWoOperationHumanResources.findFirst({
-      where: {
-        woOperationCode: payload.operationCode,
-        resourceCode: payload.resourceCode,
-      },
-    });
+    const oclWorkOrderId = payload.oclWorkOrderId;
+    const oclWoOperationId = payload.oclWoOperationId;
+
+    const existing =
+      await this.prisma.oracleWoOperationHumanResources.findFirst({
+        where: {
+          woOperationCode: payload.operationCode,
+          resourceCode: payload.resourceCode,
+        },
+      });
 
     if (existing) {
-      console.warn(`HR ${payload.resourceCode} for operation ${payload.operationCode} already synced, skipping`);
+      console.warn(
+        `HR ${payload.resourceCode} for operation ${payload.operationCode} already synced, skipping`,
+      );
       return;
     }
 
     try {
-      const oraclePayload: any = {
+      const oraclePayload: Record<string, unknown> = {
         ResourceCode: payload.resourceCode,
         PlannedStartDate: payload.plannedStartDate,
         PlannedCompletionDate: payload.plannedCompletionDate,
@@ -49,11 +90,12 @@ export class OperationHrCreatedHandler {
         oraclePayload.UsageRate = payload.usageRate;
       }
 
-      const oracleResource = await this.oracleApiClient.createOperationResource(
-        payload.oclWorkOrderId,
-        payload.oclWoOperationId,
-        oraclePayload,
-      );
+      const oracleResource =
+        (await this.oracleApiClient.createOperationResource(
+          oclWorkOrderId,
+          oclWoOperationId,
+          oraclePayload,
+        )) as OracleResourceResponse;
 
       if (!oracleResource?.WoOperationResourceId) {
         throw new Error('Oracle API did not return WoOperationResourceId');
@@ -63,20 +105,25 @@ export class OperationHrCreatedHandler {
 
       if (!oracleResource.ResourceCode) {
         try {
-          const fullResourcesResponse = await this.oracleApiClient.getOperationResources(
-            payload.oclWorkOrderId,
-            payload.oclWoOperationId,
-          );
+          const fullResourcesResponse =
+            (await this.oracleApiClient.getOperationResources(
+              oclWorkOrderId,
+              oclWoOperationId,
+            )) as OracleResourcesResponse;
 
           const fullResource = fullResourcesResponse?.items?.find(
-            (r: any) => r.WoOperationResourceId === oracleResource.WoOperationResourceId,
+            (r) =>
+              r.WoOperationResourceId === oracleResource.WoOperationResourceId,
           );
 
           if (fullResource?.ResourceCode) {
             resourceCode = fullResource.ResourceCode;
           }
-        } catch (getError: any) {
-          console.warn(`⚠️ Failed to GET complete resource from Oracle: ${getError?.message}`);
+        } catch (getError: unknown) {
+          const err = getError as { message?: string };
+          console.warn(
+            `Failed to GET complete resource from Oracle: ${err?.message}`,
+          );
         }
       } else {
         resourceCode = oracleResource.ResourceCode;
@@ -84,8 +131,8 @@ export class OperationHrCreatedHandler {
 
       await this.prisma.oracleWoOperationHumanResources.create({
         data: {
-          oclWoId: payload.oclWorkOrderId,
-          oclWoOperationId: payload.oclWoOperationId,
+          oclWoId: oclWorkOrderId,
+          oclWoOperationId,
           oclWoOperationResourceId: oracleResource.WoOperationResourceId,
           woOperationCode: payload.operationCode,
           resourceSequenceNumber: payload.resourceSequenceNumber,
@@ -96,12 +143,16 @@ export class OperationHrCreatedHandler {
         },
       });
 
-      console.log(`✅ HR ${payload.resourceCode} synced to Oracle`);
-    } catch (error: any) {
-      console.error(`❌ Failed to create HR for operation ${payload.operationCode}:`, error?.message || error);
+      console.log(`HR ${payload.resourceCode} synced to Oracle`);
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.error(
+        `Failed to create HR for operation ${payload.operationCode}:`,
+        err?.message || error,
+      );
       throw new RpcException({
         status: 500,
-        message: `Failed to sync HR to Oracle: ${error?.message}`,
+        message: `Failed to sync HR to Oracle: ${err?.message}`,
       });
     }
   }

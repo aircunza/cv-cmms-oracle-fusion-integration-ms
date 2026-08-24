@@ -10,7 +10,7 @@ datasource db {
 
 model OracleInstances {
   id          BigInt @id @default(autoincrement()) @map("id")
-  environment String @map("environment") @db.NVarChar(10)
+  environment String @map("environment") @db.NVarChar(50)
   module      String @map("module") @db.NVarChar(50)
   basic       String @map("basic") @db.Text
 
@@ -62,7 +62,7 @@ model OracleWoOperationMaterials {
   id                       BigInt    @id @default(autoincrement()) @map("id")
   oclWoId                  BigInt    @map("ocl_wo_id")
   oclWoOperationId         BigInt    @map("ocl_wo_operation_id")
-  oclWoOperationMaterialId BigInt?   @map("ocl_wo_operation_material_id")
+  oclWoOperationMaterialId BigInt?   @unique @map("ocl_wo_operation_material_id")
   woOperationCode          BigInt    @map("wo_operation_code")
   materialSequenceNumber   Int       @map("material_sequence_number")
   syncStatus               String    @default("pending") @map("sync_status") @db.NVarChar(20)
@@ -73,7 +73,6 @@ model OracleWoOperationMaterials {
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
   @@unique([woOperationCode, materialSequenceNumber])
-  @@unique([oclWoOperationMaterialId])
   @@index([oclWoId])
   @@index([oclWoOperationId])
   @@index([syncStatus])
@@ -84,7 +83,7 @@ model OracleWoOperationHumanResources {
   id                       BigInt    @id @default(autoincrement()) @map("id")
   oclWoId                  BigInt    @map("ocl_wo_id")
   oclWoOperationId         BigInt    @map("ocl_wo_operation_id")
-  oclWoOperationResourceId BigInt?   @map("ocl_wo_operation_resource_id")
+  oclWoOperationResourceId BigInt?   @unique @map("ocl_wo_operation_resource_id")
   woOperationCode          BigInt    @map("wo_operation_code")
   resourceSequenceNumber   Int       @map("resource_sequence_number")
   resourceCode             String?   @map("resource_code") @db.NVarChar(50)
@@ -96,7 +95,6 @@ model OracleWoOperationHumanResources {
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
   @@unique([woOperationCode, resourceCode])
-  @@unique([oclWoOperationResourceId])
   @@index([oclWoId])
   @@index([oclWoOperationId])
   @@index([syncStatus])

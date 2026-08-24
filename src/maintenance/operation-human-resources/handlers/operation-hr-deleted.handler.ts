@@ -3,6 +3,20 @@ import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../../../prisma.service';
 import { OracleFusionWorkOrderApiClient } from '../../common/oracle-fusion-work-order-api-client';
 
+interface OperationHrDeletedEvent {
+  payload?: string | OperationHrDeletedPayload;
+}
+
+interface OperationHrDeletedPayload {
+  enableOracleWorkOrder?: string;
+  oclWoId?: number;
+  oclWoOperationId?: number;
+  oclWoOperationResourceId?: number;
+  operationCode?: number;
+  resourceCode?: string;
+  resourceSequenceNumber?: number;
+}
+
 @Injectable()
 export class OperationHrDeletedHandler {
   constructor(
@@ -10,22 +24,33 @@ export class OperationHrDeletedHandler {
     private readonly oracleApiClient: OracleFusionWorkOrderApiClient,
   ) {}
 
-  async handle(event: any) {
-    const payload = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload;
+  async handle(event: OperationHrDeletedEvent) {
+    const payload: OperationHrDeletedPayload =
+      typeof event.payload === 'string'
+        ? (JSON.parse(event.payload) as OperationHrDeletedPayload)
+        : (event.payload ?? {});
 
     if (payload.enableOracleWorkOrder !== 'Y') {
       return;
     }
 
-    if (!payload.oclWoId || !payload.oclWoOperationId || !payload.oclWoOperationResourceId) {
+    if (
+      !payload.oclWoId ||
+      !payload.oclWoOperationId ||
+      !payload.oclWoOperationResourceId
+    ) {
       return;
     }
 
+    const oclWoId = payload.oclWoId;
+    const oclWoOperationId = payload.oclWoOperationId;
+    const oclWoOperationResourceId = payload.oclWoOperationResourceId;
+
     try {
       await this.oracleApiClient.deleteOperationResource(
-        payload.oclWoId,
-        payload.oclWoOperationId,
-        payload.oclWoOperationResourceId,
+        oclWoId,
+        oclWoOperationId,
+        oclWoOperationResourceId,
       );
 
       if (payload.resourceCode) {
@@ -44,12 +69,15 @@ export class OperationHrDeletedHandler {
         });
       }
 
-      console.log(`✅ HR ${payload.resourceCode || payload.resourceSequenceNumber} deleted from Oracle`);
-    } catch (error: any) {
-      console.error(`❌ Failed to delete HR from Oracle:`, error?.message || error);
+      console.log(
+        `HR ${payload.resourceCode || payload.resourceSequenceNumber} deleted from Oracle`,
+      );
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.error('Failed to delete HR from Oracle:', err?.message || error);
       throw new RpcException({
         status: 500,
-        message: `Failed to delete HR from Oracle: ${error?.message}`,
+        message: `Failed to delete HR from Oracle: ${err?.message}`,
       });
     }
   }

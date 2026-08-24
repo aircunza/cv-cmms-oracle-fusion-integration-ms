@@ -6,7 +6,9 @@ import { CreateOracleInstanceDto, UpdateOracleInstanceDto } from './dto';
 
 @Controller('oracle-instances')
 export class OracleInstancesController {
-  constructor(private readonly oracleInstancesService: OracleInstancesService) {}
+  constructor(
+    private readonly oracleInstancesService: OracleInstancesService,
+  ) {}
 
   @MessagePattern('oracle.instance.create')
   create(@Payload() dto: CreateOracleInstanceDto) {

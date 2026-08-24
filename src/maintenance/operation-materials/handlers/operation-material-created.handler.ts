@@ -3,6 +3,27 @@ import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../../../prisma.service';
 import { OracleFusionWorkOrderApiClient } from '../../common/oracle-fusion-work-order-api-client';
 
+interface MaterialCreatedEvent {
+  payload?: string | MaterialCreatedPayload;
+}
+
+interface MaterialCreatedPayload {
+  enableOracleWorkOrder?: string;
+  oclWoId: number;
+  oclWoOperationId: number;
+  operationCode: number;
+  material: {
+    materialSequenceNumber: number;
+    materialCode?: string;
+    quantity?: number;
+    supplyType?: string;
+  };
+}
+
+interface OracleMaterialResponse {
+  WoOperationMaterialId?: number;
+}
+
 @Injectable()
 export class OperationMaterialCreatedHandler {
   constructor(
@@ -10,17 +31,25 @@ export class OperationMaterialCreatedHandler {
     private readonly oracleApiClient: OracleFusionWorkOrderApiClient,
   ) {}
 
-  async handle(event: any) {
-    const payload = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload;
+  async handle(event: MaterialCreatedEvent) {
+    const payload: MaterialCreatedPayload =
+      typeof event.payload === 'string'
+        ? (JSON.parse(event.payload) as MaterialCreatedPayload)
+        : (event.payload as MaterialCreatedPayload);
 
     if (payload.enableOracleWorkOrder !== 'Y') {
       return;
     }
 
     if (!payload.oclWoId || !payload.oclWoOperationId) {
-      console.warn(`Cannot create material for operation ${payload.operationCode}: missing oclWoId or oclWoOperationId`);
+      console.warn(
+        `Cannot create material for operation ${payload.operationCode}: missing oclWoId or oclWoOperationId`,
+      );
       return;
     }
+
+    const oclWoId = payload.oclWoId;
+    const oclWoOperationId = payload.oclWoOperationId;
 
     const existing = await this.prisma.oracleWoOperationMaterials.findFirst({
       where: {
@@ -30,7 +59,9 @@ export class OperationMaterialCreatedHandler {
     });
 
     if (existing) {
-      console.warn(`Material ${payload.material.materialSequenceNumber} for operation ${payload.operationCode} already synced, skipping`);
+      console.warn(
+        `Material ${payload.material.materialSequenceNumber} for operation ${payload.operationCode} already synced, skipping`,
+      );
       return;
     }
 
@@ -42,11 +73,12 @@ export class OperationMaterialCreatedHandler {
         SupplyType: payload.material.supplyType,
       };
 
-      const oracleMaterial = await this.oracleApiClient.createOperationMaterial(
-        payload.oclWoId,
-        payload.oclWoOperationId,
-        oraclePayload,
-      );
+      const oracleMaterial =
+        (await this.oracleApiClient.createOperationMaterial(
+          oclWoId,
+          oclWoOperationId,
+          oraclePayload,
+        )) as OracleMaterialResponse;
 
       if (!oracleMaterial?.WoOperationMaterialId) {
         throw new Error('Oracle API did not return WoOperationMaterialId');
@@ -54,8 +86,8 @@ export class OperationMaterialCreatedHandler {
 
       await this.prisma.oracleWoOperationMaterials.create({
         data: {
-          oclWoId: payload.oclWoId,
-          oclWoOperationId: payload.oclWoOperationId,
+          oclWoId,
+          oclWoOperationId,
           oclWoOperationMaterialId: oracleMaterial.WoOperationMaterialId,
           woOperationCode: payload.operationCode,
           materialSequenceNumber: payload.material.materialSequenceNumber,
@@ -65,12 +97,18 @@ export class OperationMaterialCreatedHandler {
         },
       });
 
-      console.log(`✅ Material ${payload.material.materialSequenceNumber} synced to Oracle`);
-    } catch (error: any) {
-      console.error(`❌ Failed to create material for operation ${payload.operationCode}:`, error?.message || error);
+      console.log(
+        `Material ${payload.material.materialSequenceNumber} synced to Oracle`,
+      );
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.error(
+        `Failed to create material for operation ${payload.operationCode}:`,
+        err?.message || error,
+      );
       throw new RpcException({
         status: 500,
-        message: `Failed to sync material to Oracle: ${error?.message}`,
+        message: `Failed to sync material to Oracle: ${err?.message}`,
       });
     }
   }

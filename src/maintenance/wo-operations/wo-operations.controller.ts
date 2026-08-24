@@ -1,5 +1,4 @@
 import { Controller } from '@nestjs/common';
-import { Payload } from '@nestjs/microservices';
 import { EventPattern } from '@nestjs/microservices';
 import { WoOperationsService } from './wo-operations.service';
 import { OperationCreatedHandler } from './handlers/operation-created.handler';

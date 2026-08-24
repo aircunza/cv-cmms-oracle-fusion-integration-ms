@@ -3,6 +3,18 @@ import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../../../prisma.service';
 import { OracleFusionWorkOrderApiClient } from '../../common/oracle-fusion-work-order-api-client';
 
+interface WorkOrderEvent {
+  enableOracleWorkOrder?: string;
+  workOrderCode?: number;
+  payload?: Record<string, unknown>;
+}
+
+interface OracleWorkOrderResponse {
+  WorkOrderId?: number;
+  WorkOrderNumber?: string;
+  WorkOrderStatusCode?: string;
+}
+
 @Injectable()
 export class WorkOrderCreatedHandler {
   constructor(
@@ -10,44 +22,55 @@ export class WorkOrderCreatedHandler {
     private readonly oracleApiClient: OracleFusionWorkOrderApiClient,
   ) {}
 
-  async handle(event: any) {
-    const payload = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload;
+  async handle(event: string | WorkOrderEvent) {
+    const raw: WorkOrderEvent =
+      typeof event === 'string' ? (JSON.parse(event) as WorkOrderEvent) : event;
 
-    if (payload.enableOracleWorkOrder !== 'Y') {
+    if (raw.enableOracleWorkOrder !== 'Y') {
       return;
     }
 
-    if (!payload.workOrderCode) {
-      console.warn(`Cannot create Work Order in Oracle: no workOrderCode found`);
+    if (!raw.workOrderCode) {
+      console.warn(
+        `Cannot create Work Order in Oracle: no workOrderCode found`,
+      );
       return;
     }
+
+    const workOrderCode = raw.workOrderCode;
 
     const existing = await this.prisma.oracleWorkOrders.findFirst({
-      where: { workOrderCode: payload.workOrderCode },
+      where: { workOrderCode },
     });
 
     if (existing) {
-      console.warn(`Work Order ${payload.workOrderCode} already synced to Oracle, skipping`);
+      console.warn(
+        `Work Order ${workOrderCode} already synced to Oracle, skipping`,
+      );
       return;
     }
 
     try {
       await this.prisma.oracleWorkOrders.create({
         data: {
-          workOrderCode: payload.workOrderCode,
+          workOrderCode,
           syncStatus: 'pending',
           retryCount: 0,
         },
       });
 
-      const oracleResponse = await this.oracleApiClient.createWorkOrder(payload.payload);
+      const oracleResponse = (await this.oracleApiClient.createWorkOrder(
+        raw.payload,
+      )) as OracleWorkOrderResponse;
 
       if (!oracleResponse?.WorkOrderId) {
-        throw new Error('Oracle API did not return WorkOrderId for created Work Order');
+        throw new Error(
+          'Oracle API did not return WorkOrderId for created Work Order',
+        );
       }
 
       await this.prisma.oracleWorkOrders.updateMany({
-        where: { workOrderCode: payload.workOrderCode },
+        where: { workOrderCode },
         data: {
           oclWoId: oracleResponse.WorkOrderId,
           oclWoNumber: oracleResponse.WorkOrderNumber,
@@ -57,15 +80,21 @@ export class WorkOrderCreatedHandler {
         },
       });
 
-      console.log(`✅ Work Order ${payload.workOrderCode} synced to Oracle (oclWoId: ${oracleResponse.WorkOrderId})`);
-    } catch (error: any) {
-      console.error(`❌ Failed to create Work Order ${payload.workOrderCode} in Oracle:`, error?.message || error);
+      // console.log(
+      //   `Work Order ${workOrderCode} synced to Oracle (oclWoId: ${oracleResponse.WorkOrderId})`,
+      // );
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      console.error(
+        `Failed to create Work Order ${workOrderCode} in Oracle:`,
+        err?.message || error,
+      );
 
       await this.prisma.oracleWorkOrders.updateMany({
-        where: { workOrderCode: payload.workOrderCode, syncStatus: 'pending' },
+        where: { workOrderCode, syncStatus: 'pending' },
         data: {
           syncStatus: 'failed',
-          syncError: error?.message || 'Unknown error',
+          syncError: err?.message || 'Unknown error',
           retryCount: { increment: 1 },
           lastSyncAttempt: new Date(),
         },
@@ -73,7 +102,7 @@ export class WorkOrderCreatedHandler {
 
       throw new RpcException({
         status: 500,
-        message: `Failed to sync Work Order ${payload.workOrderCode} to Oracle: ${error?.message}`,
+        message: `Failed to sync Work Order ${workOrderCode} to Oracle: ${err?.message}`,
       });
     }
   }
