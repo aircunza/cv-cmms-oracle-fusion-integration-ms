@@ -19,8 +19,8 @@ model OracleInstances {
 
 model OracleWorkOrders {
   id              BigInt    @id @default(autoincrement()) @map("id")
-  oclWoId         BigInt?   @unique @map("ocl_wo_id")
-  oclWoNumber     String?   @unique @map("ocl_wo_number") @db.NVarChar(120)
+  oclWoId         BigInt?   @map("ocl_wo_id")
+  oclWoNumber     String?   @map("ocl_wo_number") @db.NVarChar(120)
   oclWoStatusCode String?   @map("ocl_wo_status_code") @db.NVarChar(30)
   workOrderCode   BigInt    @map("work_order_code")
   syncStatus      String    @default("pending") @map("sync_status") @db.NVarChar(20)
@@ -30,6 +30,7 @@ model OracleWorkOrders {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
+  @@unique([workOrderCode], map: "uq_work_order_code")
   @@index([workOrderCode])
   @@index([syncStatus])
   @@map("oracle_work_orders")
@@ -39,7 +40,7 @@ model OracleWoOperations {
   id                      BigInt    @id @default(autoincrement()) @map("id")
   oclWoId                 BigInt    @map("ocl_wo_id")
   oclWoNumber             String?   @map("ocl_wo_number") @db.NVarChar(120)
-  oclWoOperationId        BigInt?   @unique @map("ocl_wo_operation_id")
+  oclWoOperationId        BigInt?   @map("ocl_wo_operation_id")
   oclOperationName        String?   @map("ocl_operation_name") @db.NVarChar(120)
   oclOperationDescription String?   @map("ocl_operation_description") @db.NVarChar(240)
   workOrderCode           BigInt    @map("work_order_code")
@@ -51,6 +52,7 @@ model OracleWoOperations {
   createdAt               DateTime  @default(now()) @map("created_at")
   updatedAt               DateTime  @updatedAt @map("updated_at")
 
+  @@unique([woOperationCode], map: "uq_wo_operation_code")
   @@index([workOrderCode])
   @@index([woOperationCode])
   @@index([oclWoId])
@@ -62,7 +64,7 @@ model OracleWoOperationMaterials {
   id                       BigInt    @id @default(autoincrement()) @map("id")
   oclWoId                  BigInt    @map("ocl_wo_id")
   oclWoOperationId         BigInt    @map("ocl_wo_operation_id")
-  oclWoOperationMaterialId BigInt?   @unique @map("ocl_wo_operation_material_id")
+  oclWoOperationMaterialId BigInt?   @map("ocl_wo_operation_material_id")
   woOperationCode          BigInt    @map("wo_operation_code")
   materialSequenceNumber   Int       @map("material_sequence_number")
   syncStatus               String    @default("pending") @map("sync_status") @db.NVarChar(20)
@@ -72,7 +74,7 @@ model OracleWoOperationMaterials {
   createdAt                DateTime  @default(now()) @map("created_at")
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
-  @@unique([woOperationCode, materialSequenceNumber])
+  @@unique([woOperationCode, materialSequenceNumber], map: "uq_wo_op_mat_seq")
   @@index([oclWoId])
   @@index([oclWoOperationId])
   @@index([syncStatus])
@@ -83,7 +85,7 @@ model OracleWoOperationHumanResources {
   id                       BigInt    @id @default(autoincrement()) @map("id")
   oclWoId                  BigInt    @map("ocl_wo_id")
   oclWoOperationId         BigInt    @map("ocl_wo_operation_id")
-  oclWoOperationResourceId BigInt?   @unique @map("ocl_wo_operation_resource_id")
+  oclWoOperationResourceId BigInt?   @map("ocl_wo_operation_resource_id")
   woOperationCode          BigInt    @map("wo_operation_code")
   resourceSequenceNumber   Int       @map("resource_sequence_number")
   resourceCode             String?   @map("resource_code") @db.NVarChar(50)
@@ -94,7 +96,7 @@ model OracleWoOperationHumanResources {
   createdAt                DateTime  @default(now()) @map("created_at")
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
-  @@unique([woOperationCode, resourceCode])
+  @@unique([woOperationCode, resourceCode], map: "uq_wo_op_hr_resource")
   @@index([oclWoId])
   @@index([oclWoOperationId])
   @@index([syncStatus])

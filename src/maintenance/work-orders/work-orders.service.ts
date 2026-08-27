@@ -7,7 +7,7 @@ export class WorkOrdersService {
 
   async getSyncStatus(workOrderCode: number) {
     const record = await this.prisma.oracleWorkOrders.findFirst({
-      where: { workOrderCode },
+      where: { workOrderCode: BigInt(workOrderCode) },
     });
 
     if (!record) {

@@ -42,7 +42,7 @@ export class OperationDeletedHandler {
       await this.oracleApiClient.deleteOperation(oclWoId, oclWoOperationId);
 
       await this.prisma.oracleWoOperations.deleteMany({
-        where: { woOperationCode: payload.operationCode },
+        where: { woOperationCode: BigInt(payload.operationCode!) },
       });
 
       console.log(`Operation ${payload.operationCode} deleted from Oracle`);

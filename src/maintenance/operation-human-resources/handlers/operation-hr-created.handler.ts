@@ -59,21 +59,7 @@ export class OperationHrCreatedHandler {
 
     const oclWorkOrderId = payload.oclWorkOrderId;
     const oclWoOperationId = payload.oclWoOperationId;
-
-    const existing =
-      await this.prisma.oracleWoOperationHumanResources.findFirst({
-        where: {
-          woOperationCode: payload.operationCode,
-          resourceCode: payload.resourceCode,
-        },
-      });
-
-    if (existing) {
-      console.warn(
-        `HR ${payload.resourceCode} for operation ${payload.operationCode} already synced, skipping`,
-      );
-      return;
-    }
+    const woOperationCodeBigInt = BigInt(payload.operationCode);
 
     try {
       const oraclePayload: Record<string, unknown> = {
@@ -129,16 +115,30 @@ export class OperationHrCreatedHandler {
         resourceCode = oracleResource.ResourceCode;
       }
 
-      await this.prisma.oracleWoOperationHumanResources.create({
-        data: {
+      await this.prisma.oracleWoOperationHumanResources.upsert({
+        where: {
+          woOperationCode_resourceCode: {
+            woOperationCode: woOperationCodeBigInt,
+            resourceCode: resourceCode ?? '',
+          },
+        },
+        create: {
           oclWoId: oclWorkOrderId,
           oclWoOperationId,
           oclWoOperationResourceId: oracleResource.WoOperationResourceId,
-          woOperationCode: payload.operationCode,
+          woOperationCode: woOperationCodeBigInt,
           resourceSequenceNumber: payload.resourceSequenceNumber,
           resourceCode,
           syncStatus: 'synced',
           retryCount: 0,
+          lastSyncAttempt: new Date(),
+        },
+        update: {
+          oclWoOperationResourceId: oracleResource.WoOperationResourceId,
+          resourceSequenceNumber: payload.resourceSequenceNumber,
+          syncStatus: 'synced',
+          retryCount: 0,
+          syncError: null,
           lastSyncAttempt: new Date(),
         },
       });

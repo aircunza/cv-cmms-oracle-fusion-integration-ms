@@ -54,7 +54,7 @@ export class OperationMaterialDeletedHandler {
 
       await this.prisma.oracleWoOperationMaterials.deleteMany({
         where: {
-          woOperationCode: payload.operationCode,
+          woOperationCode: BigInt(payload.operationCode!),
           materialSequenceNumber: payload.materialSequenceNumber,
         },
       });

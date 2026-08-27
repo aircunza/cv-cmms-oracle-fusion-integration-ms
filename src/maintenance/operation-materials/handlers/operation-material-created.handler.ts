@@ -50,20 +50,8 @@ export class OperationMaterialCreatedHandler {
 
     const oclWoId = payload.oclWoId;
     const oclWoOperationId = payload.oclWoOperationId;
-
-    const existing = await this.prisma.oracleWoOperationMaterials.findFirst({
-      where: {
-        woOperationCode: payload.operationCode,
-        materialSequenceNumber: payload.material.materialSequenceNumber,
-      },
-    });
-
-    if (existing) {
-      console.warn(
-        `Material ${payload.material.materialSequenceNumber} for operation ${payload.operationCode} already synced, skipping`,
-      );
-      return;
-    }
+    const woOperationCodeBigInt = BigInt(payload.operationCode);
+    const materialSequenceNumber = payload.material.materialSequenceNumber;
 
     try {
       const oraclePayload = {
@@ -84,15 +72,28 @@ export class OperationMaterialCreatedHandler {
         throw new Error('Oracle API did not return WoOperationMaterialId');
       }
 
-      await this.prisma.oracleWoOperationMaterials.create({
-        data: {
+      await this.prisma.oracleWoOperationMaterials.upsert({
+        where: {
+          woOperationCode_materialSequenceNumber: {
+            woOperationCode: woOperationCodeBigInt,
+            materialSequenceNumber,
+          },
+        },
+        create: {
           oclWoId,
           oclWoOperationId,
           oclWoOperationMaterialId: oracleMaterial.WoOperationMaterialId,
-          woOperationCode: payload.operationCode,
-          materialSequenceNumber: payload.material.materialSequenceNumber,
+          woOperationCode: woOperationCodeBigInt,
+          materialSequenceNumber,
           syncStatus: 'synced',
           retryCount: 0,
+          lastSyncAttempt: new Date(),
+        },
+        update: {
+          oclWoOperationMaterialId: oracleMaterial.WoOperationMaterialId,
+          syncStatus: 'synced',
+          retryCount: 0,
+          syncError: null,
           lastSyncAttempt: new Date(),
         },
       });

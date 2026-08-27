@@ -56,14 +56,14 @@ export class OperationHrDeletedHandler {
       if (payload.resourceCode) {
         await this.prisma.oracleWoOperationHumanResources.deleteMany({
           where: {
-            woOperationCode: payload.operationCode,
+            woOperationCode: BigInt(payload.operationCode!),
             resourceCode: payload.resourceCode,
           },
         });
       } else if (payload.resourceSequenceNumber) {
         await this.prisma.oracleWoOperationHumanResources.deleteMany({
           where: {
-            woOperationCode: payload.operationCode,
+            woOperationCode: BigInt(payload.operationCode!),
             resourceSequenceNumber: payload.resourceSequenceNumber,
           },
         });

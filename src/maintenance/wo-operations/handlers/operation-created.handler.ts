@@ -54,16 +54,7 @@ export class OperationCreatedHandler {
       return;
     }
 
-    const existing = await this.prisma.oracleWoOperations.findFirst({
-      where: { woOperationCode: payload.operationCode },
-    });
-
-    if (existing) {
-      console.warn(
-        `Operation ${payload.operationCode} already synced to Oracle, skipping`,
-      );
-      return;
-    }
+    const woOperationCodeBigInt = BigInt(payload.operationCode);
 
     try {
       const oraclePayload = this.mapOperationToOracle(
@@ -82,8 +73,9 @@ export class OperationCreatedHandler {
         );
       }
 
-      await this.prisma.oracleWoOperations.create({
-        data: {
+      await this.prisma.oracleWoOperations.upsert({
+        where: { woOperationCode: woOperationCodeBigInt },
+        create: {
           oclWoId: payload.oclWoId,
           oclWoNumber: payload.oclWoNumber,
           oclWoOperationId: oracleOperation.WoOperationId,
@@ -92,10 +84,22 @@ export class OperationCreatedHandler {
           oclOperationDescription:
             oracleOperation.OperationDescription ||
             payload.operation?.operationDescription,
-          workOrderCode: payload.workOrderCode,
-          woOperationCode: payload.operationCode,
+          workOrderCode: BigInt(payload.workOrderCode),
+          woOperationCode: woOperationCodeBigInt,
           syncStatus: 'synced',
           retryCount: 0,
+          lastSyncAttempt: new Date(),
+        },
+        update: {
+          oclWoOperationId: oracleOperation.WoOperationId,
+          oclOperationName:
+            oracleOperation.OperationName || payload.operation?.operationName,
+          oclOperationDescription:
+            oracleOperation.OperationDescription ||
+            payload.operation?.operationDescription,
+          syncStatus: 'synced',
+          retryCount: 0,
+          syncError: null,
           lastSyncAttempt: new Date(),
         },
       });

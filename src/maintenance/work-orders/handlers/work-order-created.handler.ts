@@ -38,24 +38,20 @@ export class WorkOrderCreatedHandler {
     }
 
     const workOrderCode = raw.workOrderCode;
-
-    const existing = await this.prisma.oracleWorkOrders.findFirst({
-      where: { workOrderCode },
-    });
-
-    if (existing) {
-      console.warn(
-        `Work Order ${workOrderCode} already synced to Oracle, skipping`,
-      );
-      return;
-    }
+    const workOrderCodeBigInt = BigInt(workOrderCode);
 
     try {
-      await this.prisma.oracleWorkOrders.create({
-        data: {
-          workOrderCode,
+      await this.prisma.oracleWorkOrders.upsert({
+        where: { workOrderCode: workOrderCodeBigInt },
+        create: {
+          workOrderCode: workOrderCodeBigInt,
           syncStatus: 'pending',
           retryCount: 0,
+        },
+        update: {
+          syncStatus: 'pending',
+          retryCount: 0,
+          syncError: null,
         },
       });
 
@@ -70,7 +66,7 @@ export class WorkOrderCreatedHandler {
       }
 
       await this.prisma.oracleWorkOrders.updateMany({
-        where: { workOrderCode },
+        where: { workOrderCode: workOrderCodeBigInt },
         data: {
           oclWoId: oracleResponse.WorkOrderId,
           oclWoNumber: oracleResponse.WorkOrderNumber,
@@ -79,10 +75,6 @@ export class WorkOrderCreatedHandler {
           lastSyncAttempt: new Date(),
         },
       });
-
-      // console.log(
-      //   `Work Order ${workOrderCode} synced to Oracle (oclWoId: ${oracleResponse.WorkOrderId})`,
-      // );
     } catch (error: unknown) {
       const err = error as { message?: string };
       console.error(
@@ -91,7 +83,7 @@ export class WorkOrderCreatedHandler {
       );
 
       await this.prisma.oracleWorkOrders.updateMany({
-        where: { workOrderCode, syncStatus: 'pending' },
+        where: { workOrderCode: workOrderCodeBigInt, syncStatus: 'pending' },
         data: {
           syncStatus: 'failed',
           syncError: err?.message || 'Unknown error',

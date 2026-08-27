@@ -82,6 +82,14 @@ export async function setupOracleFusionE2eContext(overrides?: {
 export async function teardownOracleFusionE2eContext(
   context: OracleFusionE2eContext,
 ): Promise<void> {
+  try {
+    await context.prisma.oracleWoOperationHumanResources.deleteMany({});
+    await context.prisma.oracleWoOperationMaterials.deleteMany({});
+    await context.prisma.oracleWoOperations.deleteMany({});
+    await context.prisma.oracleWorkOrders.deleteMany({});
+  } catch {
+    // ignore cleanup errors during teardown
+  }
   context.client.close();
   await context.app.close();
   await context.prisma.$disconnect();
