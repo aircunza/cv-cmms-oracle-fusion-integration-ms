@@ -213,10 +213,13 @@ export function buildWorkOrderCreatedEvent(
     ...(overrides.payload as Record<string, unknown>),
   };
 
+  const operationCodes = (overrides.operationCodes as number[]) ?? [9001];
+
   const eventPayload = {
     enableOracleWorkOrder: 'Y',
     workOrderCode: 9001,
     payload: mergedPayload,
+    operationCodes,
     ...overrides,
   } as Record<string, unknown>;
 

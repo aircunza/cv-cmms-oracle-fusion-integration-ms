@@ -56,6 +56,29 @@ describe('Work Order Created Handler (e2e, NATS Event)', () => {
     expect(record?.oclWoStatusCode).not.toBeNull();
     expect(record?.retryCount).toBe(0);
     expect(record?.lastSyncAttempt).not.toBeNull();
+
+    const operations = await context.prisma.oracleWoOperations.findMany({
+      where: { workOrderCode: BigInt(9001) },
+    });
+    expect(operations.length).toBeGreaterThan(0);
+    expect(operations[0].oclWoOperationId).not.toBeNull();
+    expect(operations[0].woOperationCode).not.toBeNull();
+    expect(operations[0].syncStatus).toBe('synced');
+
+    const materials = await context.prisma.oracleWoOperationMaterials.findMany({
+      where: { woOperationCode: operations[0].woOperationCode },
+    });
+    expect(materials.length).toBeGreaterThan(0);
+    expect(materials[0].oclWoOperationMaterialId).not.toBeNull();
+    expect(materials[0].syncStatus).toBe('synced');
+
+    const resources =
+      await context.prisma.oracleWoOperationHumanResources.findMany({
+        where: { woOperationCode: operations[0].woOperationCode },
+      });
+    expect(resources.length).toBeGreaterThan(0);
+    expect(resources[0].oclWoOperationResourceId).not.toBeNull();
+    expect(resources[0].syncStatus).toBe('synced');
   });
 
   it('skips sync when enableOracleWorkOrder = "N"', async () => {
