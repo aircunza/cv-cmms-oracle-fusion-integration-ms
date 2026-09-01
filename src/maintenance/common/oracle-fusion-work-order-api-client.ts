@@ -179,4 +179,26 @@ export class OracleFusionWorkOrderApiClient {
     );
     return res.data;
   }
+
+  async getOperationMaterials(
+    oclWoId: number,
+    oclWoOperationId: number,
+  ): Promise<unknown> {
+    const { baseUrl, headers } = await this.getAuthConfig();
+    const res = await axios.get(
+      `${baseUrl}/maintenanceWorkOrders/${oclWoId}/child/WorkOrderOperation/${oclWoOperationId}/child/WorkOrderOperationMaterial`,
+      { headers },
+    );
+    return res.data;
+  }
+
+  async getWorkOrderOperations(oclWoId: number): Promise<unknown> {
+    const { baseUrl, headers } = await this.getAuthConfig();
+    const res = await axios.get(
+      `${baseUrl}/maintenanceWorkOrders/${oclWoId}/child/WorkOrderOperation`,
+      { headers },
+    );
+
+    return res.data;
+  }
 }

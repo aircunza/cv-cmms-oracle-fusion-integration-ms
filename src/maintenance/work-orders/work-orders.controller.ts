@@ -27,4 +27,36 @@ export class WorkOrdersController {
   getSyncStatus(@Payload() dto: { workOrderCode: number }) {
     return this.workOrdersService.getSyncStatus(dto.workOrderCode);
   }
+
+  @MessagePattern('oracle.sync.work-order.find-one')
+  getOracleWorkOrder(@Payload() dto: { workOrderCode: number }) {
+    return this.workOrdersService.getOracleWorkOrder(dto.workOrderCode);
+  }
+
+  @MessagePattern('oracle.sync.work-order.operations')
+  getOracleWorkOrderOperations(@Payload() dto: { workOrderCode: number }) {
+    return this.workOrdersService.getOracleWorkOrderOperations(
+      dto.workOrderCode,
+    );
+  }
+
+  @MessagePattern('oracle.sync.work-order.operation-materials')
+  getOracleOperationMaterials(
+    @Payload() dto: { workOrderCode: number; operationCode: number },
+  ) {
+    return this.workOrdersService.getOracleOperationMaterials(
+      dto.workOrderCode,
+      dto.operationCode,
+    );
+  }
+
+  @MessagePattern('oracle.sync.work-order.operation-resources')
+  getOracleOperationResources(
+    @Payload() dto: { workOrderCode: number; operationCode: number },
+  ) {
+    return this.workOrdersService.getOracleOperationResources(
+      dto.workOrderCode,
+      dto.operationCode,
+    );
+  }
 }
