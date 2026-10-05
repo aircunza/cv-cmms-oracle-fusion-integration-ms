@@ -82,9 +82,9 @@ export class OperationUpdatedHandler {
     const oraclePayload: Record<string, unknown> = {};
 
     if (changedFields.operationName)
-      oraclePayload.OperationName = changedFields.operationName;
+      oraclePayload.OperationName = (changedFields.operationName as string).substring(0, 120);
     if (changedFields.operationDescription)
-      oraclePayload.OperationDescription = changedFields.operationDescription;
+      oraclePayload.OperationDescription = (changedFields.operationDescription as string).substring(0, 240);
     if (changedFields.operationType)
       oraclePayload.OperationType =
         changedFields.operationType === 'Supplier' ? 'OSP' : 'Internal';

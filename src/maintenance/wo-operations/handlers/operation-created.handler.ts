@@ -125,8 +125,8 @@ export class OperationCreatedHandler {
     isLastOperation: boolean | undefined,
   ): Record<string, unknown> {
     return {
-      OperationName: operation?.operationName,
-      OperationDescription: operation?.operationDescription,
+      OperationName: operation?.operationName?.substring(0, 120),
+      OperationDescription: operation?.operationDescription?.substring(0, 240),
       OperationSequenceNumber: operation?.operationSeqNumber,
       OperationType:
         operation?.operationType === 'Supplier' ? 'OSP' : 'Internal',
