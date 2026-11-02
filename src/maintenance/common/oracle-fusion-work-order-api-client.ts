@@ -83,12 +83,23 @@ export class OracleFusionWorkOrderApiClient {
 
   async createOperation(oclWoId: number, operation: unknown): Promise<unknown> {
     const { baseUrl, headers } = await this.getAuthConfig();
-    const res = await axios.post(
-      `${baseUrl}/maintenanceWorkOrders/${oclWoId}/child/WorkOrderOperation`,
-      operation,
-      { headers },
-    );
-    return res.data;
+    const url = `${baseUrl}/maintenanceWorkOrders/${oclWoId}/child/WorkOrderOperation`;
+    try {
+      const res = await axios.post<unknown>(url, operation, { headers });
+      return res.data;
+    } catch (error: unknown) {
+      const axiosErr = error as {
+        message?: string;
+        response?: { status?: number; data?: unknown };
+      };
+      console.error('[oracle][createOperation] failed', {
+        url,
+        status: axiosErr?.response?.status,
+        oracleResponse: axiosErr?.response?.data,
+        message: axiosErr?.message,
+      });
+      throw error;
+    }
   }
 
   async updateOperation(

@@ -9,7 +9,7 @@ interface OperationCreatedEvent {
 
 interface OperationCreatedPayload {
   enableOracleWorkOrder?: string;
-  oclWoId: number;
+  oclWoId?: number;
   oclWoNumber?: string;
   workOrderCode: number;
   operationCode: number;
@@ -18,6 +18,8 @@ interface OperationCreatedPayload {
     operationDescription?: string;
     operationSeqNumber?: number;
     operationType?: string;
+    oracleOperationType?: string;
+    workCenterCode?: string;
     actualStartDate?: string;
     actualCompletionDate?: string;
   };
@@ -47,23 +49,37 @@ export class OperationCreatedHandler {
       return;
     }
 
-    if (!payload.oclWoId) {
-      console.warn(
-        `Cannot create operation for WO ${payload.workOrderCode} in Oracle: no oclWoId found`,
-      );
-      return;
+    const parentWo = await this.prisma.oracleWorkOrders.findUnique({
+      where: { workOrderCode: BigInt(payload.workOrderCode) },
+    });
+
+    if (!parentWo?.oclWoId) {
+      // La WO padre aún no existe en Oracle: no se puede crear la operación.
+      throw new RpcException({
+        status: 409,
+        message: `Work order ${payload.workOrderCode} is not synced to Oracle yet; operation ${payload.operationCode} not created`,
+      });
     }
 
+    const oclWoId = Number(parentWo.oclWoId);
+    const oclWoNumber =
+      payload.oclWoNumber ?? parentWo.oclWoNumber ?? undefined;
     const woOperationCodeBigInt = BigInt(payload.operationCode);
 
     try {
+      await this.ensureWorkOrderDatesCoverOperation(
+        oclWoId,
+        payload.operation?.actualStartDate,
+        payload.operation?.actualCompletionDate,
+      );
+
       const oraclePayload = this.mapOperationToOracle(
         payload.operation,
         payload.isLastOperation,
       );
 
       const oracleOperation = (await this.oracleApiClient.createOperation(
-        payload.oclWoId,
+        oclWoId,
         oraclePayload,
       )) as OracleOperationResponse;
 
@@ -76,8 +92,8 @@ export class OperationCreatedHandler {
       await this.prisma.oracleWoOperations.upsert({
         where: { woOperationCode: woOperationCodeBigInt },
         create: {
-          oclWoId: payload.oclWoId,
-          oclWoNumber: payload.oclWoNumber,
+          oclWoId,
+          oclWoNumber,
           oclWoOperationId: oracleOperation.WoOperationId,
           oclOperationName:
             oracleOperation.OperationName || payload.operation?.operationName,
@@ -103,19 +119,25 @@ export class OperationCreatedHandler {
           lastSyncAttempt: new Date(),
         },
       });
-
-      console.log(
-        `Operation ${payload.operationCode} synced to Oracle (oclWoOperationId: ${oracleOperation.WoOperationId})`,
-      );
     } catch (error: unknown) {
-      const err = error as { message?: string };
+      const err = error as {
+        message?: string;
+        response?: { status?: number; data?: unknown };
+      };
+      const oracleDetail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : undefined;
       console.error(
-        `Failed to create operation ${payload.operationCode} in Oracle:`,
-        err?.message || error,
+        `[wo.operation.created] failed operation ${payload.operationCode}`,
+        {
+          status: err?.response?.status,
+          oracleResponse: err?.response?.data,
+          message: err?.message || error,
+        },
       );
       throw new RpcException({
         status: 500,
-        message: `Failed to sync operation ${payload.operationCode} to Oracle: ${err?.message}`,
+        message: `Failed to sync operation ${payload.operationCode} to Oracle: ${err?.message}${oracleDetail ? ` - ${oracleDetail}` : ''}`,
       });
     }
   }
@@ -129,11 +151,57 @@ export class OperationCreatedHandler {
       OperationDescription: operation?.operationDescription?.substring(0, 240),
       OperationSequenceNumber: operation?.operationSeqNumber,
       OperationType:
-        operation?.operationType === 'Supplier' ? 'OSP' : 'Internal',
+        operation?.oracleOperationType ??
+        (operation?.operationType === 'Supplier' ? 'OSP' : 'Internal'),
+      WorkCenterCode: operation?.workCenterCode,
       PlannedStartDate: this.formatDate(operation?.actualStartDate),
       PlannedCompletionDate: this.formatDate(operation?.actualCompletionDate),
       CountPointOperationFlag: isLastOperation,
     };
+  }
+
+  /**
+   * Oracle rechaza la operation (WIE-4425443) si sus fechas planificadas
+   * quedan fuera del rango planificado de la work order. Si el rango actual
+   * no la cubre, se amplía la WO con PATCH antes de crear la operation.
+   */
+  private async ensureWorkOrderDatesCoverOperation(
+    oclWoId: number,
+    opStart: string | undefined,
+    opEnd: string | undefined,
+  ): Promise<void> {
+    if (!opStart || !opEnd) return;
+
+    const opStartMs = new Date(opStart).getTime();
+    const opEndMs = new Date(opEnd).getTime();
+    if (Number.isNaN(opStartMs) || Number.isNaN(opEndMs)) return;
+
+    const wo = (await this.oracleApiClient.getWorkOrderById(
+      String(oclWoId),
+    )) as { PlannedStartDate?: string; PlannedCompletionDate?: string };
+
+    const woStartMs = wo?.PlannedStartDate
+      ? new Date(wo.PlannedStartDate).getTime()
+      : NaN;
+    const woEndMs = wo?.PlannedCompletionDate
+      ? new Date(wo.PlannedCompletionDate).getTime()
+      : NaN;
+
+    const newStartMs = Number.isNaN(woStartMs)
+      ? opStartMs
+      : Math.min(woStartMs, opStartMs);
+    const newEndMs = Number.isNaN(woEndMs)
+      ? opEndMs
+      : Math.max(woEndMs, opEndMs);
+
+    const changed = newStartMs !== woStartMs || newEndMs !== woEndMs;
+
+    if (!changed) return;
+
+    await this.oracleApiClient.updateWorkOrder(oclWoId, {
+      PlannedStartDate: this.formatDate(new Date(newStartMs).toISOString()),
+      PlannedCompletionDate: this.formatDate(new Date(newEndMs).toISOString()),
+    });
   }
 
   private formatDate(date: string | undefined): string {
