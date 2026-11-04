@@ -28,6 +28,18 @@ export class WorkOrdersController {
     return this.workOrdersService.getSyncStatus(dto.workOrderCode);
   }
 
+  @MessagePattern('oracle.sync.work-order.integration.find-one')
+  getIntegrationWorkOrder(@Payload() dto: { workOrderCode: number }) {
+    return this.workOrdersService.getIntegrationWorkOrder(dto.workOrderCode);
+  }
+
+  @MessagePattern('oracle.sync.work-order.integration.find-many')
+  getIntegrationWorkOrders(@Payload() dto: { workOrderCodes: number[] }) {
+    return this.workOrdersService.getIntegrationWorkOrdersByCodes(
+      dto.workOrderCodes,
+    );
+  }
+
   @MessagePattern('oracle.sync.work-order.find-one')
   getOracleWorkOrder(@Payload() dto: { workOrderCode: number }) {
     return this.workOrdersService.getOracleWorkOrder(dto.workOrderCode);

@@ -58,6 +58,132 @@ export class WorkOrdersService {
     };
   }
 
+  async getIntegrationWorkOrder(workOrderCode: number) {
+    const [result] = await this.getIntegrationWorkOrdersByCodes([
+      workOrderCode,
+    ]);
+    return result;
+  }
+
+  async getIntegrationWorkOrdersByCodes(workOrderCodes: number[]) {
+    const uniqueCodes = [...new Set(workOrderCodes.map((c) => Number(c)))];
+    const codes = uniqueCodes.map((c) => BigInt(c));
+
+    const workOrders = await this.prisma.oracleWorkOrders.findMany({
+      where: { workOrderCode: { in: codes } },
+    });
+
+    const operations = await this.prisma.oracleWoOperations.findMany({
+      where: { workOrderCode: { in: codes } },
+      orderBy: { woOperationCode: 'asc' },
+    });
+
+    const operationCodes = operations.map((op) => op.woOperationCode);
+
+    const materials = await this.prisma.oracleWoOperationMaterials.findMany({
+      where: { woOperationCode: { in: operationCodes } },
+      orderBy: { materialSequenceNumber: 'asc' },
+    });
+
+    const humanResources =
+      await this.prisma.oracleWoOperationHumanResources.findMany({
+        where: { woOperationCode: { in: operationCodes } },
+        orderBy: { resourceSequenceNumber: 'asc' },
+      });
+
+    const workOrderByCode = new Map(
+      workOrders.map((wo) => [wo.workOrderCode.toString(), wo]),
+    );
+
+    const materialsByOperation = new Map<string, typeof materials>();
+    for (const material of materials) {
+      const key = material.woOperationCode.toString();
+      materialsByOperation.set(key, [
+        ...(materialsByOperation.get(key) ?? []),
+        material,
+      ]);
+    }
+
+    const resourcesByOperation = new Map<string, typeof humanResources>();
+    for (const resource of humanResources) {
+      const key = resource.woOperationCode.toString();
+      resourcesByOperation.set(key, [
+        ...(resourcesByOperation.get(key) ?? []),
+        resource,
+      ]);
+    }
+
+    const operationsByWorkOrder = new Map<string, typeof operations>();
+    for (const op of operations) {
+      const key = op.workOrderCode.toString();
+      operationsByWorkOrder.set(key, [
+        ...(operationsByWorkOrder.get(key) ?? []),
+        op,
+      ]);
+    }
+
+    return uniqueCodes.map((code) => {
+      const key = code.toString();
+      const wo = workOrderByCode.get(key);
+
+      if (!wo) {
+        return { workOrderCode: key, status: 'not_found' as const };
+      }
+
+      return {
+        workOrderCode: key,
+        status: 'found' as const,
+        oracleWorkOrderId: wo.oclWoId,
+        oracleWorkOrderNumber: wo.oclWoNumber,
+        oracleWorkOrderStatusCode: wo.oclWoStatusCode,
+        syncStatus: wo.syncStatus,
+        syncError: wo.syncError,
+        retryCount: wo.retryCount,
+        lastSyncAttempt: wo.lastSyncAttempt,
+        createdAt: wo.createdAt,
+        updatedAt: wo.updatedAt,
+        operations: (operationsByWorkOrder.get(key) ?? []).map((op) => {
+          const opKey = op.woOperationCode.toString();
+          return {
+            woOperationCode: opKey,
+            oracleOperationId: op.oclWoOperationId,
+            oracleOperationName: op.oclOperationName,
+            oracleOperationDescription: op.oclOperationDescription,
+            syncStatus: op.syncStatus,
+            syncError: op.syncError,
+            retryCount: op.retryCount,
+            lastSyncAttempt: op.lastSyncAttempt,
+            createdAt: op.createdAt,
+            updatedAt: op.updatedAt,
+            materials: (materialsByOperation.get(opKey) ?? []).map((m) => ({
+              materialSequenceNumber: m.materialSequenceNumber,
+              oracleOperationMaterialId: m.oclWoOperationMaterialId,
+              syncStatus: m.syncStatus,
+              syncError: m.syncError,
+              retryCount: m.retryCount,
+              lastSyncAttempt: m.lastSyncAttempt,
+              createdAt: m.createdAt,
+              updatedAt: m.updatedAt,
+            })),
+            humanResources: (resourcesByOperation.get(opKey) ?? []).map(
+              (r) => ({
+                resourceSequenceNumber: r.resourceSequenceNumber,
+                resourceCode: r.resourceCode,
+                oracleOperationResourceId: r.oclWoOperationResourceId,
+                syncStatus: r.syncStatus,
+                syncError: r.syncError,
+                retryCount: r.retryCount,
+                lastSyncAttempt: r.lastSyncAttempt,
+                createdAt: r.createdAt,
+                updatedAt: r.updatedAt,
+              }),
+            ),
+          };
+        }),
+      };
+    });
+  }
+
   async getOracleWorkOrder(workOrderCode: number) {
     const record = await this.prisma.oracleWorkOrders.findFirst({
       where: { workOrderCode: BigInt(workOrderCode) },
