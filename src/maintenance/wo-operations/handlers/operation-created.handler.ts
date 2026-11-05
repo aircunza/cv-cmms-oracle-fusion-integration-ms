@@ -188,10 +188,6 @@ export class OperationCreatedHandler {
         PlannedCompletionDate: this.formatDate(res.actualCompletionDate),
       };
       try {
-        console.log(
-          `[wo.operation.created] sending resource ${res.resourceCode} (oclWoId=${oclWoId}, oclWoOperationId=${oclWoOperationId}):`,
-          JSON.stringify(resourceBody),
-        );
         const oracleResource =
           (await this.oracleApiClient.createOperationResource(
             oclWoId,

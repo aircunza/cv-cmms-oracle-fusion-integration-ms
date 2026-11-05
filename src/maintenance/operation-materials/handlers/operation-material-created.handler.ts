@@ -9,12 +9,12 @@ interface MaterialCreatedEvent {
 
 interface MaterialCreatedPayload {
   enableOracleWorkOrder?: string;
-  oclWoId: number;
-  oclWoOperationId: number;
+  workOrderCode: number;
   operationCode: number;
+  requiredDate?: string;
   material: {
     materialSequenceNumber: number;
-    materialCode?: string;
+    materialCode: string;
     quantity?: number;
     supplyType?: string;
   };
@@ -41,24 +41,37 @@ export class OperationMaterialCreatedHandler {
       return;
     }
 
-    if (!payload.oclWoId || !payload.oclWoOperationId) {
-      console.warn(
-        `Cannot create material for operation ${payload.operationCode}: missing oclWoId or oclWoOperationId`,
-      );
-      return;
+    // Los IDs de Oracle no viajan en el evento: se resuelven desde las tablas
+    // de integración (la WO y la operación ya deben estar sincronizadas).
+    const parentWo = await this.prisma.oracleWorkOrders.findUnique({
+      where: { workOrderCode: BigInt(payload.workOrderCode) },
+    });
+    const parentOp = await this.prisma.oracleWoOperations.findUnique({
+      where: { woOperationCode: BigInt(payload.operationCode) },
+    });
+
+    if (!parentWo?.oclWoId || !parentOp?.oclWoOperationId) {
+      throw new RpcException({
+        status: 409,
+        message: `Operation ${payload.operationCode} is not synced to Oracle yet; material ${payload.material.materialSequenceNumber} not created`,
+      });
     }
 
-    const oclWoId = payload.oclWoId;
-    const oclWoOperationId = payload.oclWoOperationId;
+    const oclWoId = Number(parentWo.oclWoId);
+    const oclWoOperationId = Number(parentOp.oclWoOperationId);
     const woOperationCodeBigInt = BigInt(payload.operationCode);
     const materialSequenceNumber = payload.material.materialSequenceNumber;
 
     try {
+      // Fusion no acepta ItemNumber en el hijo WorkOrderOperationMaterial;
+      // el campo válido es InventoryItemNumber (mismo que usa WO create).
       const oraclePayload = {
-        ItemNumber: payload.material.materialCode,
-        MaterialSequenceNumber: payload.material.materialSequenceNumber,
+        InventoryItemNumber: payload.material.materialCode,
+        MaterialSequenceNumber: materialSequenceNumber,
         Quantity: payload.material.quantity,
-        SupplyType: payload.material.supplyType,
+        SupplyType: payload.material.supplyType ?? '1',
+        // Fusion exige RequiredDate: se usa la fecha inicial de la operación.
+        RequiredDate: this.formatDate(payload.requiredDate),
       };
 
       const oracleMaterial =
@@ -80,9 +93,11 @@ export class OperationMaterialCreatedHandler {
           },
         },
         create: {
-          oclWoId,
-          oclWoOperationId,
-          oclWoOperationMaterialId: oracleMaterial.WoOperationMaterialId,
+          oclWoId: BigInt(oclWoId),
+          oclWoOperationId: BigInt(oclWoOperationId),
+          oclWoOperationMaterialId: BigInt(
+            oracleMaterial.WoOperationMaterialId,
+          ),
           woOperationCode: woOperationCodeBigInt,
           materialSequenceNumber,
           syncStatus: 'synced',
@@ -90,27 +105,61 @@ export class OperationMaterialCreatedHandler {
           lastSyncAttempt: new Date(),
         },
         update: {
-          oclWoOperationMaterialId: oracleMaterial.WoOperationMaterialId,
+          oclWoOperationMaterialId: BigInt(
+            oracleMaterial.WoOperationMaterialId,
+          ),
           syncStatus: 'synced',
           retryCount: 0,
           syncError: null,
           lastSyncAttempt: new Date(),
         },
       });
-
-      console.log(
-        `Material ${payload.material.materialSequenceNumber} synced to Oracle`,
-      );
     } catch (error: unknown) {
-      const err = error as { message?: string };
+      const err = error as {
+        message?: string;
+        response?: { status?: number; data?: unknown };
+      };
       console.error(
-        `Failed to create material for operation ${payload.operationCode}:`,
-        err?.message || error,
+        `[operation.material.created] material ${payload.material.materialCode} failed for operation ${payload.operationCode}:`,
+        {
+          status: err?.response?.status,
+          oracleResponse: JSON.stringify(err?.response?.data),
+          message: err?.message || error,
+        },
       );
+      await this.prisma.oracleWoOperationMaterials.upsert({
+        where: {
+          woOperationCode_materialSequenceNumber: {
+            woOperationCode: woOperationCodeBigInt,
+            materialSequenceNumber,
+          },
+        },
+        create: {
+          oclWoId: BigInt(oclWoId),
+          oclWoOperationId: BigInt(oclWoOperationId),
+          woOperationCode: woOperationCodeBigInt,
+          materialSequenceNumber,
+          syncStatus: 'failed',
+          syncError: err?.message ?? String(error),
+          retryCount: 1,
+          lastSyncAttempt: new Date(),
+        },
+        update: {
+          syncStatus: 'failed',
+          syncError: err?.message ?? String(error),
+          retryCount: { increment: 1 },
+          lastSyncAttempt: new Date(),
+        },
+      });
       throw new RpcException({
         status: 500,
         message: `Failed to sync material to Oracle: ${err?.message}`,
       });
     }
+  }
+
+  private formatDate(date: string | undefined): string | undefined {
+    if (!date) return undefined;
+    return new Date(date).toISOString().replace(/\.\d{3}Z$/, '+00:00');
   }
 }
