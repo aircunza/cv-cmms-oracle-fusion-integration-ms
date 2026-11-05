@@ -133,12 +133,14 @@ export class OracleFusionWorkOrderApiClient {
     material: unknown,
   ): Promise<unknown> {
     const { baseUrl, headers } = await this.getAuthConfig();
-    const res = await axios.post(
-      `${baseUrl}/maintenanceWorkOrders/${oclWoId}/child/WorkOrderOperation/${oclWoOperationId}/child/WorkOrderOperationMaterial`,
-      material,
-      { headers },
-    );
-    return res.data;
+    const url = `${baseUrl}/maintenanceWorkOrders/${oclWoId}/child/WorkOrderOperation/${oclWoOperationId}/child/WorkOrderOperationMaterial`;
+    try {
+      const res = await axios.post(url, material, { headers });
+      return res.data;
+    } catch (error: unknown) {
+      this.logOracleError('createOperationMaterial', url, material, error);
+      throw error;
+    }
   }
 
   async deleteOperationMaterial(
@@ -171,12 +173,33 @@ export class OracleFusionWorkOrderApiClient {
     resource: unknown,
   ): Promise<unknown> {
     const { baseUrl, headers } = await this.getAuthConfig();
-    const res = await axios.post(
-      `${baseUrl}/maintenanceWorkOrders/${oclWoId}/child/WorkOrderOperation/${oclWoOperationId}/child/WorkOrderOperationResource`,
-      resource,
-      { headers },
-    );
-    return res.data;
+    const url = `${baseUrl}/maintenanceWorkOrders/${oclWoId}/child/WorkOrderOperation/${oclWoOperationId}/child/WorkOrderOperationResource`;
+    try {
+      const res = await axios.post(url, resource, { headers });
+      return res.data;
+    } catch (error: unknown) {
+      this.logOracleError('createOperationResource', url, resource, error);
+      throw error;
+    }
+  }
+
+  private logOracleError(
+    method: string,
+    url: string,
+    requestBody: unknown,
+    error: unknown,
+  ): void {
+    const axiosErr = error as {
+      message?: string;
+      response?: { status?: number; data?: unknown };
+    };
+    console.error(`[oracle][${method}] failed`, {
+      url,
+      requestBody: JSON.stringify(requestBody),
+      status: axiosErr?.response?.status,
+      oracleResponse: JSON.stringify(axiosErr?.response?.data),
+      message: axiosErr?.message,
+    });
   }
 
   async getOperationResources(

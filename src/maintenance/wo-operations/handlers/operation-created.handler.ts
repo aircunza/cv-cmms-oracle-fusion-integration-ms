@@ -24,12 +24,26 @@ interface OperationCreatedPayload {
     actualCompletionDate?: string;
   };
   isLastOperation?: boolean;
+  resources?: OperationResourcePayload[];
+}
+
+interface OperationResourcePayload {
+  resourceCode: string;
+  resourceSequenceNumber?: number;
+  actualHours?: number;
+  principalFlag?: string;
+  actualStartDate?: string;
+  actualCompletionDate?: string;
 }
 
 interface OracleOperationResponse {
   WoOperationId?: number;
   OperationName?: string;
   OperationDescription?: string;
+}
+
+interface OracleResourceResponse {
+  WoOperationResourceId?: number;
 }
 
 @Injectable()
@@ -119,6 +133,13 @@ export class OperationCreatedHandler {
           lastSyncAttempt: new Date(),
         },
       });
+      await this.syncOperationResources(
+        oclWoId,
+        oracleOperation.WoOperationId,
+        woOperationCodeBigInt,
+        payload.resources ?? [],
+        payload.isLastOperation ?? false,
+      );
     } catch (error: unknown) {
       const err = error as {
         message?: string;
@@ -139,6 +160,119 @@ export class OperationCreatedHandler {
         status: 500,
         message: `Failed to sync operation ${payload.operationCode} to Oracle: ${err?.message}${oracleDetail ? ` - ${oracleDetail}` : ''}`,
       });
+    }
+  }
+
+  /**
+   * Crea en Fusion los recursos de la operación. Un fallo en un recurso no
+   * revierte la operación ya creada: queda registrado con syncStatus 'failed'.
+   */
+  private async syncOperationResources(
+    oclWoId: number,
+    oclWoOperationId: number,
+    woOperationCode: bigint,
+    resources: OperationResourcePayload[],
+    isLastOperation: boolean,
+  ): Promise<void> {
+    for (const res of resources) {
+      const resourceSequenceNumber = res.resourceSequenceNumber ?? 0;
+      // Mismo mapeo que OracleWorkOrderMapper (WO create): UsageRate = horas reales.
+      const resourceBody = {
+        PrincipalFlag: res.principalFlag ?? 'N',
+        BasisType: 1,
+        ResourceCode: res.resourceCode,
+        UsageRate: res.actualHours,
+        ResourceSequenceNumber: res.resourceSequenceNumber,
+        ChargeType: isLastOperation ? 'AUTOMATIC' : 'MANUAL',
+        PlannedStartDate: this.formatDate(res.actualStartDate),
+        PlannedCompletionDate: this.formatDate(res.actualCompletionDate),
+      };
+      try {
+        console.log(
+          `[wo.operation.created] sending resource ${res.resourceCode} (oclWoId=${oclWoId}, oclWoOperationId=${oclWoOperationId}):`,
+          JSON.stringify(resourceBody),
+        );
+        const oracleResource =
+          (await this.oracleApiClient.createOperationResource(
+            oclWoId,
+            oclWoOperationId,
+            resourceBody,
+          )) as OracleResourceResponse;
+
+        if (!oracleResource?.WoOperationResourceId) {
+          throw new Error('Oracle API did not return WoOperationResourceId');
+        }
+
+        await this.prisma.oracleWoOperationHumanResources.upsert({
+          where: {
+            woOperationCode_resourceCode: {
+              woOperationCode,
+              resourceCode: res.resourceCode,
+            },
+          },
+          create: {
+            oclWoId: BigInt(oclWoId),
+            oclWoOperationId: BigInt(oclWoOperationId),
+            oclWoOperationResourceId: BigInt(
+              oracleResource.WoOperationResourceId,
+            ),
+            woOperationCode,
+            resourceSequenceNumber,
+            resourceCode: res.resourceCode,
+            syncStatus: 'synced',
+            retryCount: 0,
+            lastSyncAttempt: new Date(),
+          },
+          update: {
+            oclWoOperationResourceId: BigInt(
+              oracleResource.WoOperationResourceId,
+            ),
+            resourceSequenceNumber,
+            syncStatus: 'synced',
+            retryCount: 0,
+            syncError: null,
+            lastSyncAttempt: new Date(),
+          },
+        });
+      } catch (error: unknown) {
+        const err = error as { message?: string };
+        const axiosErr = error as {
+          response?: { status?: number; data?: unknown };
+        };
+        console.error(
+          `[wo.operation.created] resource ${res.resourceCode} failed for operation ${woOperationCode}:`,
+          {
+            status: axiosErr?.response?.status,
+            oracleResponse: JSON.stringify(axiosErr?.response?.data),
+            message: err?.message || error,
+          },
+        );
+        await this.prisma.oracleWoOperationHumanResources.upsert({
+          where: {
+            woOperationCode_resourceCode: {
+              woOperationCode,
+              resourceCode: res.resourceCode,
+            },
+          },
+          create: {
+            oclWoId: BigInt(oclWoId),
+            oclWoOperationId: BigInt(oclWoOperationId),
+            woOperationCode,
+            resourceSequenceNumber,
+            resourceCode: res.resourceCode,
+            syncStatus: 'failed',
+            syncError: err?.message ?? String(error),
+            retryCount: 1,
+            lastSyncAttempt: new Date(),
+          },
+          update: {
+            syncStatus: 'failed',
+            syncError: err?.message ?? String(error),
+            retryCount: { increment: 1 },
+            lastSyncAttempt: new Date(),
+          },
+        });
+      }
     }
   }
 
