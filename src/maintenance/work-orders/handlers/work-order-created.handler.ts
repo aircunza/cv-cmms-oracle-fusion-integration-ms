@@ -81,7 +81,7 @@ export class WorkOrderCreatedHandler {
       });
 
       const oracleResponse = (await this.oracleApiClient.createWorkOrder(
-        raw.payload,
+        this.truncateOperationDescriptions(raw.payload),
       )) as OracleWorkOrderResponse;
 
       if (!oracleResponse?.WorkOrderId) {
@@ -238,5 +238,29 @@ export class WorkOrderCreatedHandler {
         message: `Failed to sync Work Order ${workOrderCode} to Oracle: ${err?.message}`,
       });
     }
+  }
+
+  /**
+   * Oracle Fusion acepta como máximo 239 caracteres en OperationDescription.
+   * Se trunca cada operation de la WO antes de enviarla.
+   */
+  private truncateOperationDescriptions(
+    payload: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!payload || !Array.isArray(payload.WorkOrderOperation)) {
+      return payload;
+    }
+
+    const operations = (payload.WorkOrderOperation as OracleOperation[]).map(
+      (op) =>
+        typeof op?.OperationDescription === 'string'
+          ? {
+              ...op,
+              OperationDescription: op.OperationDescription.substring(0, 239),
+            }
+          : op,
+    );
+
+    return { ...payload, WorkOrderOperation: operations };
   }
 }

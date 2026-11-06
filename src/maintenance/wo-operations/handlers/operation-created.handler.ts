@@ -278,7 +278,7 @@ export class OperationCreatedHandler {
   ): Record<string, unknown> {
     return {
       OperationName: operation?.operationName?.substring(0, 120),
-      OperationDescription: operation?.operationDescription?.substring(0, 240),
+      OperationDescription: operation?.operationDescription?.substring(0, 239),
       OperationSequenceNumber: operation?.operationSeqNumber,
       OperationType:
         operation?.oracleOperationType ??
